@@ -1,0 +1,16 @@
+{
+  "title": "Paperless Workflows",
+  "config": {"step": {"user": {"title": "Connect Paperless Workflows", "description": "Connects Paperless-ngx. Document views are configured afterwards in Options.", "data": {"url": "Paperless URL", "api_key": "API token", "verify_ssl": "Verify TLS certificate", "scan_interval": "Polling interval in seconds", "default_currency": "Default currency"}}}, "error": {"cannot_connect": "Paperless cannot be reached.", "invalid_auth": "The API token was rejected.", "invalid_url": "The URL is invalid."}, "abort": {"already_configured": "This Paperless instance is already configured."}},
+  "options": {"step": {
+    "init": {"title": "Paperless views", "menu_options": {"general": "General settings", "add_view": "Add view", "edit_view": "Edit view", "delete_view": "Delete view"}},
+    "general": {"title": "General settings", "data": {"scan_interval": "Polling interval in seconds", "default_currency": "Default currency"}},
+    "edit_view": {"title": "Select a view to edit", "data": {"view": "View"}}, "delete_view": {"title": "Delete a view", "data": {"view": "View"}},
+    "view_basic": {"title": "1 · Basics", "data": {"name": "Name", "icon": "Icon", "enabled": "Enabled"}},
+    "view_tags": {"title": "2 · Tag filters", "data": {"tags_any": "Any of these tags", "tags_all": "All of these tags", "tags_none": "None of these tags"}},
+    "view_metadata": {"title": "3 · Metadata filters", "data": {"correspondents": "Correspondents", "document_types": "Document types", "storage_paths": "Storage paths", "owners": "Owners"}},
+    "view_exclusions": {"title": "4 · Exclusions", "data": {"correspondents_none": "Exclude correspondents", "document_types_none": "Exclude document types", "storage_paths_none": "Exclude storage paths", "owners_none": "Exclude owners"}},
+    "view_search": {"title": "4 · Search and expert filters", "data": {"search": "Full-text search", "mime_type": "MIME type", "created_after": "Created on/after (YYYY-MM-DD)", "created_before": "Created on/before (YYYY-MM-DD)", "advanced_filters_json": "Expert filters (JSON)"}},
+    "view_presentation": {"title": "5 · Document display", "data": {"display_documents": "Expose individual documents", "document_fields": "Document details", "document_custom_fields": "Visible Custom Fields (empty = all)", "max_documents": "Maximum documents", "ordering": "Sort order"}},
+    "view_metrics": {"title": "6 · Metrics and grouping", "data": {"count": "Create count/summary sensor", "attention": "Create warning indicator", "attention_threshold": "Warning from this count", "aggregate_fields": "Fields to sum", "group_by": "Primary grouping", "secondary_group_by": "Secondary grouping"}}
+  }, "error": {"invalid_json": "Enter a JSON object with valid Paperless filters."}, "abort": {"no_views": "There are no views yet."}}
+}

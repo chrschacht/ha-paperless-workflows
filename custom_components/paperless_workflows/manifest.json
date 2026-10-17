@@ -1,0 +1,10 @@
+{
+  "domain": "paperless_workflows",
+  "name": "Paperless Workflows",
+  "config_flow": true,
+  "documentation": "https://docs.paperless-ngx.com/api/",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.2.0"
+}
