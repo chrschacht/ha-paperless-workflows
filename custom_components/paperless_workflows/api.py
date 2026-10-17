@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunsplit
 
 from aiohttp import ClientResponseError, ClientSession
 
@@ -37,6 +37,18 @@ class PaperlessWorkflowClient:
         if (parsed.scheme, parsed.netloc) != (self._origin.scheme, self._origin.netloc):
             raise PaperlessApiError("Paperless pagination attempted to leave the configured origin")
         return url
+
+    def _pagination_url(self, candidate: str) -> str:
+        """Keep Paperless pagination on the configured public origin.
+
+        Reverse proxies sometimes make Paperless emit an internal host or HTTP
+        scheme in ``next``. Only its API path and query are retained, so the
+        token can never be forwarded to that reported origin.
+        """
+        parsed = urlparse(urljoin(f"{self.base_url}/", candidate))
+        if not parsed.path.startswith("/api/"):
+            raise PaperlessApiError("Paperless returned an invalid pagination path")
+        return urlunsplit((self._origin.scheme, self._origin.netloc, parsed.path, parsed.query, ""))
 
     async def _get_json(self, endpoint_or_url: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
         try:
@@ -70,7 +82,7 @@ class PaperlessWorkflowClient:
             if not isinstance(page, list):
                 raise PaperlessApiError("Paperless returned an invalid result page")
             results.extend(item for item in page if isinstance(item, dict))
-            next_url = str(payload["next"]) if payload.get("next") else None
+            next_url = self._pagination_url(str(payload["next"])) if payload.get("next") else None
         return results
 
     async def validate(self) -> None:

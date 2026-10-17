@@ -58,7 +58,9 @@ may list users; otherwise owner IDs remain usable. Keep TLS verification enabled
 ## Safety and scale
 
 - Every API page is followed, so counts and sums are complete.
-- Pagination URLs are accepted only from the configured Paperless origin.
+- Pagination keeps only Paperless' `/api/` path and query and rewrites them to
+  the configured public origin. This supports reverse proxies without ever
+  forwarding the token to the host reported by the server.
 - The token is stored in Home Assistant's config entry and never exposed as an
   entity attribute.
 - Mixed currencies are never silently combined; each currency gets its own
