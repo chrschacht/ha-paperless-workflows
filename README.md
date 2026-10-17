@@ -51,6 +51,9 @@ Copy `custom_components/paperless_workflows` to Home Assistant's
 **Paperless Workflows** under Settings → Devices & services. Afterwards use
 **Configure** on the integration to add or edit views.
 
+Use **Reconfigure** to replace the URL or API token later. Leaving the token
+field empty keeps the current credential and never changes the document views.
+
 The API token needs read access to documents, tags, correspondents, document
 types, storage paths, and custom fields. Owner names are loaded when the token
 may list users; otherwise owner IDs remain usable. Keep TLS verification enabled.

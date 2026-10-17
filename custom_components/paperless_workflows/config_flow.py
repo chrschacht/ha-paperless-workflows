@@ -15,6 +15,7 @@ from homeassistant.const import CONF_URL
 from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 
 from .api import PaperlessApiError, PaperlessAuthError, PaperlessWorkflowClient
 from .const import (
@@ -24,10 +25,11 @@ from .const import (
 )
 
 
-def _connection_schema(defaults: dict[str, Any]) -> vol.Schema:
+def _connection_schema(defaults: dict[str, Any], *, token_required: bool = True) -> vol.Schema:
+    token_key = vol.Required(CONF_API_KEY) if token_required else vol.Optional(CONF_API_KEY, default="")
     return vol.Schema({
         vol.Required(CONF_URL, default=defaults.get(CONF_URL, "")): str,
-        vol.Required(CONF_API_KEY, default=defaults.get(CONF_API_KEY, "")): str,
+        token_key: TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
         vol.Required(CONF_VERIFY_SSL, default=defaults.get(CONF_VERIFY_SSL, True)): bool,
         vol.Required(CONF_SCAN_INTERVAL, default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL)),
         vol.Required(CONF_DEFAULT_CURRENCY, default=defaults.get(CONF_DEFAULT_CURRENCY, DEFAULT_CURRENCY)): vol.All(str, vol.Length(min=3, max=3)),
@@ -66,6 +68,27 @@ class PaperlessWorkflowsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input[CONF_VIEWS] = default_views()
                 return self.async_create_entry(title="Paperless Workflows", data=user_input)
         return self.async_show_form(step_id="user", data_schema=_connection_schema(user_input or {}), errors=errors)
+
+    async def async_step_reconfigure(self, user_input=None):
+        """Update connection credentials without touching configured views."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        defaults = {**entry.data, CONF_API_KEY: ""}
+        if user_input is not None:
+            candidate = {**entry.data, **user_input}
+            if not user_input.get(CONF_API_KEY):
+                candidate[CONF_API_KEY] = entry.data[CONF_API_KEY]
+            candidate[CONF_URL] = candidate[CONF_URL].rstrip("/")
+            candidate[CONF_DEFAULT_CURRENCY] = candidate[CONF_DEFAULT_CURRENCY].upper()
+            if error := await _validate(self.hass, candidate):
+                errors["base"] = error
+            else:
+                return self.async_update_reload_and_abort(entry, data=candidate)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_connection_schema({**defaults, **(user_input or {})}, token_required=False),
+            errors=errors,
+        )
 
     @staticmethod
     @callback
