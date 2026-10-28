@@ -155,11 +155,11 @@ def render_document(
     if "tags" in selected_set:
         result["tags"] = [_entity_name(value, maps.get("tags", {})) for value in document.get("tags") or []]
     if "custom_fields" in selected_set:
-        requested = set(selected_custom_fields)
+        requested = {normalize_lookup_name(name) for name in selected_custom_fields}
         visible_custom_fields = {}
         for field_id, value in custom_field_values(document).items():
             name = maps.get("custom_fields", {}).get(field_id, f"#{field_id}")
-            if not requested or name in requested:
+            if not requested or normalize_lookup_name(name) in requested:
                 visible_custom_fields[name] = value
         result["custom_fields"] = visible_custom_fields
     return result

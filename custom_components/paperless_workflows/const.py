@@ -41,8 +41,8 @@ DEFAULT_VIEWS = [
     {
         "id": "payments", "name": "Zu bezahlen", "icon": "mdi:cash-clock", "enabled": True,
         "filters": {"tags_all": ["Bezahlen"]}, "display_documents": True,
-        "document_fields": ["title", "correspondent", "document_type", "tags", "custom_fields"],
-        "document_custom_fields": ["Betrag"],
+        "document_fields": ["title", "correspondent", "document_type", "tags", "custom_fields", "created"],
+        "document_custom_fields": ["Betrag", "Fälligkeitsdatum"],
         "max_documents": 25, "count": True, "attention": True, "attention_threshold": 1,
         "aggregate_fields": ["Betrag"], "group_by": "none", "secondary_group_by": "none",
         "advanced_filters": {},

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -11,7 +13,8 @@ from .coordinator import PaperlessWorkflowCoordinator
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate the original three fixed workflows to configurable views."""
-    if entry.version == 1:
+    version = entry.version
+    if version == 1:
         from .const import CONF_VIEWS, default_views
 
         views = default_views()
@@ -22,6 +25,31 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         views[2]["filters"]["tags_all"] = [legacy.get("ocr_tag", "ocrpruefen")]
         data = {**entry.data, CONF_VIEWS: views}
         hass.config_entries.async_update_entry(entry, data=data, version=2)
+        version = 2
+    if version == 2:
+        from .const import CONF_VIEWS, default_views
+
+        data = deepcopy(dict(entry.data))
+        options = deepcopy(dict(entry.options))
+        source = options if CONF_VIEWS in options else data
+        views = deepcopy(source.get(CONF_VIEWS, default_views()))
+        for view in views:
+            if view.get("id") != "payments":
+                continue
+            fields = list(view.get("document_fields", []))
+            if "created" not in fields:
+                fields.append("created")
+            if "custom_fields" not in fields:
+                fields.append("custom_fields")
+            custom_fields = list(view.get("document_custom_fields", []))
+            if "Fälligkeitsdatum" not in custom_fields:
+                custom_fields.append("Fälligkeitsdatum")
+            view["document_fields"] = fields
+            view["document_custom_fields"] = custom_fields
+        source[CONF_VIEWS] = views
+        hass.config_entries.async_update_entry(
+            entry, data=data, options=options, version=3
+        )
     return True
 
 

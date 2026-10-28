@@ -38,11 +38,15 @@ METADATA = {
     "document_types": [{"id": 4, "name": "Rechnung"}],
     "storage_paths": [{"id": 5, "name": "Praxis"}],
     "users": [{"id": 1, "username": "christian"}],
-    "custom_fields": [{"id": 2, "name": "Betrag", "data_type": "monetary"}, {"id": 8, "name": "Mahnstufe", "data_type": "integer"}],
+    "custom_fields": [
+        {"id": 2, "name": "Betrag", "data_type": "monetary"},
+        {"id": 8, "name": "Mahnstufe", "data_type": "integer"},
+        {"id": 9, "name": "Fälligkeitsdatum", "data_type": "date"},
+    ],
 }
 
 DOCUMENTS = [
-    {"id": 10, "title": "R1", "tags": [7], "correspondent": 3, "document_type": 4, "storage_path": 5, "owner": 1, "created": "2026-10-01", "custom_fields": [{"field": 2, "value": "EUR10.50"}, {"field": 8, "value": 1}]},
+    {"id": 10, "title": "R1", "tags": [7], "correspondent": 3, "document_type": 4, "storage_path": 5, "owner": 1, "created": "2026-10-01", "custom_fields": [{"field": 2, "value": "EUR10.50"}, {"field": 8, "value": 1}, {"field": 9, "value": "2026-10-31"}]},
     {"id": 11, "title": "R2", "tags": [7, 26], "correspondent": 3, "document_type": 4, "storage_path": 5, "owner": 1, "created": "2026-10-02", "custom_fields": [{"field": 2, "value": 20}, {"field": 8, "value": 2}]},
 ]
 
@@ -61,6 +65,17 @@ class ViewTests(unittest.TestCase):
         self.assertEqual(rendered["correspondent"], "Labor")
         self.assertEqual(rendered["custom_fields"], {"Betrag": "EUR10.50"})
         self.assertNotIn("tags", rendered)
+
+    def test_matches_selected_custom_fields_with_normalized_names(self):
+        rendered = render_document(
+            DOCUMENTS[0],
+            ["created", "custom_fields"],
+            metadata_maps(METADATA),
+            "https://paperless.example",
+            ["FÄLLIGKEITSDATUM"],
+        )
+        self.assertEqual(rendered["created"], "2026-10-01")
+        self.assertEqual(rendered["custom_fields"], {"Fälligkeitsdatum": "2026-10-31"})
 
     def test_aggregates_and_groups_counts_and_sums(self):
         totals, invalid = aggregate_field(DOCUMENTS, METADATA["custom_fields"][0], "EUR")

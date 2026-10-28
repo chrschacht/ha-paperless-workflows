@@ -53,7 +53,7 @@ async def _validate(hass, data: dict[str, Any]) -> str | None:
 class PaperlessWorkflowsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure the Paperless connection."""
 
-    VERSION = 2
+    VERSION = 3
 
     async def async_step_user(self, user_input=None):
         errors: dict[str, str] = {}
