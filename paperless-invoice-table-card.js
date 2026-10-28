@@ -289,7 +289,7 @@ class PaperlessInvoiceTableCard extends HTMLElement {
           <thead><tr>
             ${this.header("Titel", "title")}
             ${this.header("Korrespondent", "correspondent")}
-            ${this.header("Rechnungsdatum", "created")}
+            ${this.header("Erstellt", "created")}
             ${this.header("Fälligkeitsdatum", "due_date")}
             ${this.header("Betrag", "amount")}
           </tr></thead>
