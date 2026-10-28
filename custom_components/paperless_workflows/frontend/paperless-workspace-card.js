@@ -384,6 +384,17 @@ class PaperlessWorkspaceCardEditor extends HTMLElement {
 
   bindEvents() {
     const root = this.shadowRoot;
+    root.querySelectorAll("input[data-action]").forEach((element) => element.addEventListener("input", (event) => {
+      const action = event.target.dataset.action;
+      const value = event.target.value;
+      const index = Number(event.target.dataset.index);
+      if (action === "title" || action === "description") this.config[action] = value;
+      else if (action === "max-documents") this.config.max_documents = Math.max(1, Math.min(100, Number(value) || 50));
+      else if (action === "column-label") this.config.columns[index].label = value;
+      else if (action === "column-size") this.config.columns[index].font_size = Math.max(10, Math.min(40, Number(value) || 14));
+      else return;
+      this.changed();
+    }));
     root.querySelectorAll("input[data-action],select[data-action]").forEach((element) => element.addEventListener("change", (event) => {
       const action = event.target.dataset.action; const value = event.target.value; const index = Number(event.target.dataset.index);
       if (action === "instance") this.update((config) => { config.instance_id = value; config.tags = []; config.columns = PW_DEFAULTS.columns.map((column) => ({ ...column })); config.default_tag_id = null; });
