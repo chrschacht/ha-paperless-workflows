@@ -7,7 +7,7 @@ class PaperlessInvoiceTableCard extends HTMLElement {
       default_sort: "due_date",
       default_direction: "asc",
       secondary_sort: "created",
-      secondary_direction: "desc",
+      secondary_direction: "asc",
       ...config,
     };
     this.sortKey ??= this.config.default_sort;
