@@ -9,6 +9,8 @@ const PW_DEFAULTS = {
   ],
   max_documents: 50,
   ordering: "created",
+  default_sort: null,
+  default_direction: "asc",
 };
 
 const pwEscape = (value) => String(value ?? "")
@@ -37,6 +39,8 @@ class PaperlessWorkspaceCard extends HTMLElement {
   setConfig(config) {
     this.config = pwNormalizeConfig(config);
     this._activeTagId = this.config.default_tag_id || this.config.tags[0]?.id || null;
+    this._sortKey = this.config.default_sort || null;
+    this._sortDirection = this.config.default_direction || "asc";
     this._instances = null;
     this._results = new Map();
     this._loadVersion = (this._loadVersion || 0) + 1;
@@ -211,8 +215,8 @@ class PaperlessWorkspaceCard extends HTMLElement {
 
   chooseTag(tagId) {
     this._activeTagId = Number(tagId);
-    this._sortKey = null;
-    this._sortDirection = "asc";
+    this._sortKey = this.config.default_sort || null;
+    this._sortDirection = this.config.default_direction || "asc";
     this.refresh();
   }
 
