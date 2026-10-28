@@ -29,6 +29,84 @@ const pwNormalizeConfig = (config = {}) => ({
     : PW_DEFAULTS.columns.map((column) => ({ ...column })),
 });
 
+const PW_WORKFLOW_EVENT = "paperless-workflows-selection";
+const PW_WORKFLOW_STATE = window.__paperlessWorkflowSelections || new Map();
+window.__paperlessWorkflowSelections = PW_WORKFLOW_STATE;
+
+const pwGlassStyle = `
+  :host{display:block;color:#fff;font-family:var(--paper-font-body1_-_font-family,system-ui)}
+  ha-card{height:100%;overflow:hidden;border:1px solid rgba(255,255,255,.46);border-radius:28px;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.035));box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 18px 46px rgba(0,0,0,.16);backdrop-filter:blur(28px) saturate(138%);-webkit-backdrop-filter:blur(28px) saturate(138%);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.38)}
+`;
+
+const pwEditorStyle = `
+  :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,system-ui)}
+  .editor{display:grid;gap:18px;padding:8px 2px 18px}.section{padding:16px;border:1px solid var(--divider-color);border-radius:16px;background:var(--card-background-color)}h3{margin:0 0 12px;font-size:16px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}label{display:grid;gap:5px;font-size:12px;color:var(--secondary-text-color)}input,select{box-sizing:border-box;width:100%;min-height:40px;padding:8px 10px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit}.add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0 0 10px}.add button,.buttons button{border:1px solid var(--divider-color);border-radius:10px;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}.add button{padding:0 16px}.row{display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px;border:1px solid var(--divider-color);border-radius:13px;background:var(--secondary-background-color)}.row.dragging{opacity:.45}.handle{cursor:grab;color:var(--secondary-text-color);font-size:18px}.grow{display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1fr);align-items:center;gap:8px;flex:1}.grow small{text-align:right}.buttons{display:flex;gap:5px}.buttons button{width:32px;height:32px;font-size:16px}.column{align-items:flex-start}.column-fields{display:grid;grid-template-columns:minmax(150px,1.5fr) 90px 110px 110px;gap:8px;flex:1}.hint{margin:4px 0 0;color:var(--secondary-text-color);font-size:12px}.error{color:var(--error-color)}@media(max-width:700px){.grid,.column-fields{grid-template-columns:1fr}.grow{grid-template-columns:1fr}.grow small{text-align:left}.row{align-items:flex-start;flex-wrap:wrap}.buttons{margin-left:auto}}
+`;
+
+class PaperlessCardBase extends HTMLElement {
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this.loadInstances();
+  }
+
+  async loadInstances() {
+    if (!this._hass || this._loadingInstances) return;
+    this._loadingInstances = true;
+    try {
+      const response = await this._hass.callWS({ type: "paperless_workflows/instances" });
+      this._instances = response.instances || [];
+      this._instance = this._instances.find((item) => item.entry_id === this.config?.instance_id)
+        || (this._instances.length === 1 ? this._instances[0] : null);
+      this._error = null;
+      this.instancesLoaded();
+    } catch (error) {
+      this._error = error?.message || String(error);
+      this.render();
+    } finally { this._loadingInstances = false; }
+  }
+
+  instancesLoaded() { this.render(); }
+}
+
+class PaperlessEditorBase extends HTMLElement {
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this.loadInstances();
+  }
+
+  async loadInstances() {
+    if (!this._hass || this._loading) return;
+    this._loading = true;
+    try {
+      const response = await this._hass.callWS({ type: "paperless_workflows/instances" });
+      this.instances = response.instances || [];
+      if (!this.config.instance_id && this.instances.length === 1) {
+        this.config.instance_id = this.instances[0].entry_id;
+        this.changed();
+      }
+      this.error = null;
+      this.render();
+    } catch (error) {
+      this.error = error?.message || String(error);
+      this.render();
+    } finally { this._loading = false; }
+  }
+
+  get instance() { return this.instances?.find((item) => item.entry_id === this.config.instance_id) || null; }
+
+  changed() {
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: { ...this.config } }, bubbles: true, composed: true }));
+  }
+
+  update(mutator) { mutator(this.config); this.changed(); this.render(); }
+
+  instanceOptions() {
+    return (this.instances || []).map((item) => `<option value="${pwEscape(item.entry_id)}" ${item.entry_id === this.config.instance_id ? "selected" : ""}>${pwEscape(item.title)} · ${pwEscape(item.dns_name)}</option>`).join("");
+  }
+}
+
 class PaperlessWorkspaceCard extends HTMLElement {
   static getStubConfig() { return pwNormalizeConfig(); }
 
@@ -428,12 +506,247 @@ class PaperlessWorkspaceCardEditor extends HTMLElement {
   }
 }
 
+class PaperlessHeaderCard extends PaperlessCardBase {
+  static getStubConfig() { return { title: "PAPERLESS-NGX", description: "Praxis-DMS" }; }
+  static async getConfigElement() { return document.createElement("paperless-header-card-editor"); }
+
+  setConfig(config) {
+    this.config = { title: "PAPERLESS-NGX", description: "Praxis-DMS", ...config };
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.render(); this.loadInstances();
+  }
+
+  getCardSize() { return 2; }
+  getLayoutOptions() { return { grid_columns: "full", grid_rows: 2 }; }
+
+  render() {
+    if (!this.shadowRoot || !this.config) return;
+    this.shadowRoot.innerHTML = `<style>${pwGlassStyle}.header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:24px 26px 20px}.title{margin:0 0 3px;font-size:28px;line-height:1.1}.description{font-size:15px;opacity:.82}.dns{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.42);border-radius:999px;padding:9px 13px;background:rgba(255,255,255,.07);white-space:nowrap}.dns:hover{background:rgba(255,255,255,.14)}.error{padding:0 26px 18px;color:#ffb4ab}@media(max-width:700px){.header{align-items:flex-start;flex-direction:column}}</style><ha-card><div class="header"><div><div class="title">${pwEscape(this.config.title)}</div><div class="description">${pwEscape(this.config.description)}</div></div>${this._instance ? `<a class="dns" href="${pwEscape(this._instance.url)}" target="_blank" rel="noopener noreferrer">${pwEscape(this._instance.dns_name)}</a>` : ""}</div>${this._error ? `<div class="error">${pwEscape(this._error)}</div>` : ""}</ha-card>`;
+  }
+}
+
+class PaperlessHeaderCardEditor extends PaperlessEditorBase {
+  setConfig(config) {
+    this.config = { title: "PAPERLESS-NGX", description: "Praxis-DMS", ...config };
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.loadInstances(); this.render();
+  }
+
+  render() {
+    if (!this.shadowRoot || !this.config) return;
+    this.shadowRoot.innerHTML = `<style>${pwEditorStyle}</style><div class="editor"><div class="section"><h3>Paperless-Header</h3><label>Instanz<select data-action="instance"><option value="">Bitte auswählen</option>${this.instanceOptions()}</select></label><div class="grid" style="margin-top:12px"><label>Titel<input data-action="title" value="${pwEscape(this.config.title)}"></label><label>Beschreibung<input data-action="description" value="${pwEscape(this.config.description)}"></label></div><p class="hint">Der DNS-Name und das Linkziel werden automatisch aus der ausgewählten Paperless-Instanz ermittelt.</p>${this.error ? `<p class="error">${pwEscape(this.error)}</p>` : ""}</div></div>`;
+    this.shadowRoot.querySelector('[data-action="instance"]').addEventListener("change", (event) => this.update((config) => { config.instance_id = event.target.value; }));
+    this.shadowRoot.querySelectorAll("input[data-action]").forEach((input) => input.addEventListener("input", (event) => { this.config[event.target.dataset.action] = event.target.value; this.changed(); }));
+  }
+}
+
+class PaperlessWorkflowCard extends PaperlessCardBase {
+  static getStubConfig() { return { workflow_id: "paperless-main", tags: [] }; }
+  static async getConfigElement() { return document.createElement("paperless-workflow-card-editor"); }
+
+  setConfig(config) {
+    this.config = { workflow_id: "paperless-main", tags: [], ...config, tags: Array.isArray(config.tags) ? config.tags.map((tag) => ({ ...tag })) : [] };
+    this._activeTagId = this.config.default_tag_id || this.config.tags[0]?.id || null;
+    this._results = new Map();
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.render(); this.loadInstances();
+  }
+
+  instancesLoaded() { this.refresh(); }
+  getCardSize() { return Math.max(3, this.config.tags.length * 2); }
+  getLayoutOptions() { return { grid_columns: "full", grid_rows: "auto" }; }
+
+  liveTag(tag) { return this._instance?.tags.find((item) => Number(item.id) === Number(tag?.id)) || tag; }
+
+  formatMoney(value, currency = this._instance?.default_currency || "EUR") {
+    const number = Number(value);
+    return Number.isFinite(number) ? `${new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number)} ${currency}` : "—";
+  }
+
+  aggregateText(result) {
+    return Object.entries(result?.aggregate?.totals || {}).map(([currency, value]) => this.formatMoney(value, currency)).join(" · ");
+  }
+
+  publishSelection() {
+    const tag = this.config.tags.find((item) => Number(item.id) === Number(this._activeTagId));
+    if (!tag || !this._instance) return;
+    const detail = { workflow_id: this.config.workflow_id, entry_id: this._instance.entry_id, tag: { ...tag, ...this.liveTag(tag) } };
+    PW_WORKFLOW_STATE.set(this.config.workflow_id, detail);
+    window.dispatchEvent(new CustomEvent(PW_WORKFLOW_EVENT, { detail }));
+  }
+
+  async refresh() {
+    if (!this._hass || !this._instance || this._refreshing) return;
+    if (!this.config.tags.length) { this._results = new Map(); this.render(); return; }
+    this._refreshing = true; this.render();
+    try {
+      const responses = await Promise.all(this.config.tags.map(async (tag) => {
+        const message = { type: "paperless_workflows/tag_workspace", entry_id: this._instance.entry_id, tag_id: Number(tag.id), columns: [], max_documents: 0 };
+        if (tag.sum_field_id !== undefined && tag.sum_field_id !== null && tag.sum_field_id !== "") message.sum_field_id = Number(tag.sum_field_id);
+        return [Number(tag.id), await this._hass.callWS(message)];
+      }));
+      this._results = new Map(responses); this._error = null; this.publishSelection();
+    } catch (error) { this._error = error?.message || String(error); }
+    finally { this._refreshing = false; this.render(); }
+  }
+
+  chooseTag(id) { this._activeTagId = Number(id); this.publishSelection(); this.render(); }
+
+  render() {
+    if (!this.shadowRoot || !this.config) return;
+    const buttons = this.config.tags.map((tag) => {
+      const live = this.liveTag(tag); const result = this._results.get(Number(tag.id)); const color = pwColor(live?.color); const selected = Number(tag.id) === Number(this._activeTagId);
+      return `<button class="tag ${selected ? "selected" : ""}" data-tag="${Number(tag.id)}" style="--tag-color:${color}"><span class="tag-name">${pwEscape(live?.name || tag.name)}</span><span class="tag-meta"><strong>${result?.count ?? "—"}</strong> Dokumente</span>${result?.aggregate ? `<span class="tag-sum">${pwEscape(this.aggregateText(result))}</span>` : ""}</button>`;
+    }).join("");
+    this.shadowRoot.innerHTML = `<style>${pwGlassStyle}.body{padding:18px}.label{padding:0 4px 10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.68}.tag{display:block;width:100%;margin:0 0 10px;padding:14px 15px;border:1.25px solid var(--tag-color);border-radius:19px;background:linear-gradient(135deg,rgba(255,255,255,.10),color-mix(in srgb,var(--tag-color) 8%,transparent));color:#fff;text-align:left;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.32);transition:.16s ease}.tag:last-child{margin-bottom:0}.tag:hover{transform:translateY(-1px);background:linear-gradient(135deg,rgba(255,255,255,.15),color-mix(in srgb,var(--tag-color) 13%,transparent))}.tag.selected{border-width:2.5px;box-shadow:inset 4px 0 0 var(--tag-color),0 8px 25px color-mix(in srgb,var(--tag-color) 24%,transparent)}.tag-name{display:block;font-size:16px;font-weight:700}.tag-meta,.tag-sum{display:block;margin-top:5px;font-size:12px;opacity:.82}.tag-sum{font-size:14px;font-weight:650;opacity:1}.setup,.error{padding:16px 4px;color:rgba(255,255,255,.84)}.error{color:#ffb4ab}</style><ha-card><div class="body"><div class="label">Dokumenten-Workflows</div>${this._error ? `<div class="error">${pwEscape(this._error)}</div>` : !this._instance ? '<div class="setup">Bitte eine Paperless-Instanz auswählen.</div>' : !buttons ? '<div class="setup">Bitte Tags im Karteneditor hinzufügen.</div>' : buttons}</div></ha-card>`;
+    this.shadowRoot.querySelectorAll("[data-tag]").forEach((button) => button.addEventListener("click", () => this.chooseTag(button.dataset.tag)));
+  }
+}
+
+class PaperlessWorkflowCardEditor extends PaperlessEditorBase {
+  setConfig(config) {
+    this.config = { workflow_id: "paperless-main", tags: [], ...config, tags: Array.isArray(config.tags) ? config.tags.map((tag) => ({ ...tag })) : [] };
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.loadInstances(); this.render();
+  }
+
+  move(from, to) {
+    if (to < 0 || to >= this.config.tags.length || from === to) return;
+    const tags = [...this.config.tags]; const [item] = tags.splice(from, 1); tags.splice(to, 0, item); this.update((config) => { config.tags = tags; });
+  }
+
+  render() {
+    if (!this.shadowRoot || !this.config) return;
+    const chosen = new Set(this.config.tags.map((tag) => Number(tag.id)));
+    const available = (this.instance?.tags || []).filter((tag) => !chosen.has(Number(tag.id)));
+    const monetary = (this.instance?.custom_fields || []).filter((field) => field.data_type === "monetary");
+    const rows = this.config.tags.map((tag, index) => {
+      const live = this.instance?.tags.find((item) => Number(item.id) === Number(tag.id));
+      return `<div class="row draggable" draggable="true" data-index="${index}"><span class="handle">⋮⋮</span><span class="grow"><strong>${pwEscape(live?.name || tag.name)}</strong><small>Summenfeld</small><select data-action="tag-sum" data-index="${index}"><option value="">Keine Summe</option>${monetary.map((field) => `<option value="${field.id}" ${Number(tag.sum_field_id) === Number(field.id) ? "selected" : ""}>${pwEscape(field.name)}</option>`).join("")}</select></span><span class="buttons"><button data-action="up" data-index="${index}">↑</button><button data-action="down" data-index="${index}">↓</button><button data-action="remove" data-index="${index}">×</button></span></div>`;
+    }).join("");
+    const defaults = this.config.tags.map((tag) => `<option value="${tag.id}" ${Number(this.config.default_tag_id) === Number(tag.id) ? "selected" : ""}>${pwEscape(tag.name)}</option>`).join("");
+    this.shadowRoot.innerHTML = `<style>${pwEditorStyle}</style><div class="editor"><div class="section"><h3>Dokumenten-Workflows</h3><div class="grid"><label>Paperless-Instanz<select data-action="instance"><option value="">Bitte auswählen</option>${this.instanceOptions()}</select></label><label>Workflow-ID<input data-action="workflow-id" value="${pwEscape(this.config.workflow_id)}"></label></div><p class="hint">Die Workflow-ID verbindet diese Karte mit einer Workflow-Details-Karte.</p></div><div class="section"><h3>Tags</h3><div class="add"><select data-add="tag"><option value="">Tag auswählen …</option>${available.map((tag) => `<option value="${tag.id}">${pwEscape(tag.name)}</option>`).join("")}</select><button data-action="add">Hinzufügen</button></div>${rows || '<p class="hint">Noch keine Tags ausgewählt.</p>'}<label style="margin-top:12px">Beim Öffnen ausgewählter Tag<select data-action="default-tag"><option value="">Erster Tag</option>${defaults}</select></label><p class="hint">Tags können mit dem Griff oder den Pfeilen verschoben werden. Die Farbe wird live aus Paperless übernommen.</p></div></div>`;
+    const root = this.shadowRoot;
+    root.querySelector('[data-action="instance"]').addEventListener("change", (event) => this.update((config) => { config.instance_id = event.target.value; config.tags = []; config.default_tag_id = null; }));
+    root.querySelector('[data-action="workflow-id"]').addEventListener("input", (event) => { this.config.workflow_id = event.target.value; this.changed(); });
+    root.querySelector('[data-action="default-tag"]').addEventListener("change", (event) => this.update((config) => { config.default_tag_id = event.target.value ? Number(event.target.value) : null; }));
+    root.querySelectorAll('[data-action="tag-sum"]').forEach((select) => select.addEventListener("change", (event) => this.update((config) => { config.tags[Number(event.target.dataset.index)].sum_field_id = event.target.value ? Number(event.target.value) : null; })));
+    root.querySelectorAll("button[data-action]").forEach((button) => button.addEventListener("click", () => {
+      const action = button.dataset.action; const index = Number(button.dataset.index);
+      if (action === "add") { const id = Number(root.querySelector('[data-add="tag"]').value); const tag = this.instance?.tags.find((item) => Number(item.id) === id); if (tag) this.update((config) => { config.tags.push({ id, name: tag.name, sum_field_id: null }); if (!config.default_tag_id) config.default_tag_id = id; }); }
+      else if (action === "remove") this.update((config) => { config.tags.splice(index, 1); if (!config.tags.some((tag) => Number(tag.id) === Number(config.default_tag_id))) config.default_tag_id = config.tags[0]?.id || null; });
+      else if (action === "up") this.move(index, index - 1); else if (action === "down") this.move(index, index + 1);
+    }));
+    let dragged = null;
+    root.querySelectorAll(".draggable").forEach((row) => { row.addEventListener("dragstart", () => { dragged = Number(row.dataset.index); row.classList.add("dragging"); }); row.addEventListener("dragend", () => row.classList.remove("dragging")); row.addEventListener("dragover", (event) => event.preventDefault()); row.addEventListener("drop", (event) => { event.preventDefault(); this.move(dragged, Number(row.dataset.index)); dragged = null; }); });
+  }
+}
+
+class PaperlessWorkflowDetailsCard extends PaperlessCardBase {
+  static getStubConfig() { return { workflow_id: "paperless-main", columns: PW_DEFAULTS.columns.map((item) => ({ ...item })), max_documents: 50, ordering: "created", default_direction: "asc" }; }
+  static async getConfigElement() { return document.createElement("paperless-workflow-details-card-editor"); }
+
+  setConfig(config) {
+    this.config = pwNormalizeConfig({ workflow_id: "paperless-main", ...config });
+    this._activeTag = PW_WORKFLOW_STATE.get(this.config.workflow_id)?.tag || null;
+    this._sortKey = this.config.default_sort || null; this._sortDirection = this.config.default_direction || "asc";
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.render(); this.loadInstances();
+  }
+
+  connectedCallback() {
+    this._selectionHandler = (event) => {
+      if (event.detail?.workflow_id !== this.config?.workflow_id) return;
+      if (this.config.instance_id && event.detail.entry_id !== this.config.instance_id) return;
+      this._activeTag = event.detail.tag; this._sortKey = this.config.default_sort || null; this._sortDirection = this.config.default_direction || "asc"; this.refresh();
+    };
+    window.addEventListener(PW_WORKFLOW_EVENT, this._selectionHandler);
+  }
+
+  disconnectedCallback() { if (this._selectionHandler) window.removeEventListener(PW_WORKFLOW_EVENT, this._selectionHandler); }
+  instancesLoaded() {
+    const shared = PW_WORKFLOW_STATE.get(this.config.workflow_id);
+    if (shared && (!this.config.instance_id || shared.entry_id === this.config.instance_id)) this._activeTag = shared.tag;
+    if (!this._activeTag && this.config.default_tag_id) this._activeTag = this._instance?.tags.find((tag) => Number(tag.id) === Number(this.config.default_tag_id));
+    this.refresh();
+  }
+  getCardSize() { return 7; }
+  getLayoutOptions() { return { grid_columns: "full", grid_rows: 7 }; }
+
+  fieldDefinition(key) {
+    if (!this._instance) return null;
+    if (key.startsWith("standard:")) { const raw = key.split(":", 2)[1]; return this._instance.document_fields.find((field) => field.key === raw) || null; }
+    const id = Number(key.split(":", 2)[1]); const field = this._instance.custom_fields.find((item) => Number(item.id) === id); return field ? { ...field, key, custom: true } : null;
+  }
+  rawValue(document, key) { if (key.startsWith("standard:")) return document[key.split(":", 2)[1]]; const field = this.fieldDefinition(key); return field ? document.custom_fields?.[field.name] : null; }
+  dateValue(value) { if (!value) return null; const text = String(value).trim(); const iso = /^\d{4}-\d{2}-\d{2}/.exec(text)?.[0]; if (iso) return iso; const german = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(text); if (german) return `${german[3]}-${german[2].padStart(2, "0")}-${german[1].padStart(2, "0")}`; const timestamp = Date.parse(text); return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString().slice(0, 10); }
+  numberValue(value) { if (typeof value === "number") return value; const parsed = Number.parseFloat(String(value ?? "").replace(/[A-Z€$£\s]/gi, "").replace(",", ".")); return Number.isFinite(parsed) ? parsed : null; }
+  formatMoney(value, currency = this._instance?.default_currency || "EUR") { const number = this.numberValue(value); return number === null ? "—" : `${new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number)} ${currency}`; }
+  formatValue(document, column) { const definition = this.fieldDefinition(column.key); const value = this.rawValue(document, column.key); if (value === null || value === undefined || value === "") return "—"; if (definition?.data_type === "date" || ["created", "added", "modified"].includes(definition?.key)) { const iso = this.dateValue(value); if (!iso) return String(value); const [year, month, day] = iso.split("-"); return `${day}.${month}.${year}`; } if (definition?.data_type === "monetary") return this.formatMoney(value); if (Array.isArray(value)) return value.join(", "); if (typeof value === "object") return JSON.stringify(value); return String(value); }
+  aggregateText(result) { return Object.entries(result?.aggregate?.totals || {}).map(([currency, value]) => this.formatMoney(value, currency)).join(" · "); }
+  compareDocuments(left, right) { if (!this._sortKey) return 0; const definition = this.fieldDefinition(this._sortKey); let a = this.rawValue(left, this._sortKey); let b = this.rawValue(right, this._sortKey); if (definition?.data_type === "date" || ["created", "added", "modified"].includes(definition?.key)) { a = this.dateValue(a); b = this.dateValue(b); } else if (["monetary", "integer", "float"].includes(definition?.data_type)) { a = this.numberValue(a); b = this.numberValue(b); } if (a === null || a === undefined || a === "") return b === null || b === undefined || b === "" ? 0 : 1; if (b === null || b === undefined || b === "") return -1; const result = typeof a === "number" ? a - b : String(a).localeCompare(String(b), "de-DE", { numeric: true, sensitivity: "base" }); return this._sortDirection === "desc" ? -result : result; }
+  chooseSort(key) { if (this._sortKey === key) this._sortDirection = this._sortDirection === "asc" ? "desc" : "asc"; else { this._sortKey = key; this._sortDirection = "asc"; } this.render(); }
+
+  async refresh() {
+    if (!this._hass || !this._instance || !this._activeTag || this._refreshing) { this.render(); return; }
+    this._refreshing = true; this.render();
+    try {
+      const message = { type: "paperless_workflows/tag_workspace", entry_id: this._instance.entry_id, tag_id: Number(this._activeTag.id), columns: this.config.columns.map((column) => column.key), ordering: this.config.ordering || "created", max_documents: Number(this.config.max_documents || 50) };
+      if (this._activeTag.sum_field_id !== undefined && this._activeTag.sum_field_id !== null && this._activeTag.sum_field_id !== "") message.sum_field_id = Number(this._activeTag.sum_field_id);
+      this._result = await this._hass.callWS(message); this._error = null;
+    } catch (error) { this._error = error?.message || String(error); }
+    finally { this._refreshing = false; this.render(); }
+  }
+
+  render() {
+    if (!this.shadowRoot || !this.config) return;
+    const accent = pwColor(this._activeTag?.color); const documents = [...(this._result?.documents || [])].sort((a, b) => this.compareDocuments(a, b));
+    const headers = this.config.columns.map((column) => { const active = this._sortKey === column.key; const arrow = active ? (this._sortDirection === "asc" ? "▲" : "▼") : ""; const justify = column.align === "right" ? "flex-end" : column.align === "center" ? "center" : "flex-start"; return `<th style="text-align:${column.align || "left"}"><button data-sort="${pwEscape(column.key)}" style="justify-content:${justify}">${pwEscape(column.label || this.fieldDefinition(column.key)?.name || column.key)} <span>${arrow}</span></button></th>`; }).join("");
+    const rows = documents.map((document) => `<tr>${this.config.columns.map((column) => { const value = pwEscape(this.formatValue(document, column)); const weight = column.text_style === "bold" ? 700 : 400; const style = column.text_style === "italic" ? "italic" : "normal"; const content = column.key === "standard:title" ? `<a href="${pwEscape(document.url || "#")}" target="_blank" rel="noopener noreferrer">${value}</a>` : value; return `<td style="font-size:${Number(column.font_size || 14)}px;font-weight:${weight};font-style:${style};text-align:${column.align || "left"}">${content}</td>`; }).join("")}</tr>`).join("");
+    this.shadowRoot.innerHTML = `<style>${pwGlassStyle}:host{--accent:${accent}}.details{min-width:0;padding:18px 22px 24px}.head{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:baseline;gap:18px;padding:4px 2px 15px;border-bottom:1px solid color-mix(in srgb,var(--accent) 70%,white)}.title{font-size:20px;font-weight:750}.total{text-align:right;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}.loading{font-size:12px;opacity:.72}.error,.empty,.setup{margin:22px 2px;color:rgba(255,255,255,.84)}.error{color:#ffb4ab}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;table-layout:auto}thead tr,tbody tr{border-bottom:1px solid rgba(255,255,255,.21)}tbody tr:last-child{border-bottom:0}th{padding:11px 8px;background:rgba(255,255,255,.03)}th button{appearance:none;display:flex;align-items:center;gap:5px;width:100%;padding:0;border:0;background:transparent;color:#fff;font:650 13px/1.2 inherit;cursor:pointer}th button:hover{color:var(--accent)}td{padding:13px 8px;color:rgba(255,255,255,.94);vertical-align:middle;overflow-wrap:anywhere}td a{color:#fff;text-decoration:none}td a:hover{text-decoration:underline}@media(max-width:800px){.details{padding:16px 14px 22px}.table-wrap table{min-width:720px}}</style><ha-card><main class="details">${this._error ? `<div class="error">${pwEscape(this._error)}</div>` : !this._instance ? '<div class="setup">Bitte eine Paperless-Instanz auswählen.</div>' : !this._activeTag ? '<div class="setup">Bitte einen Workflow in der verbundenen Workflow-Karte auswählen.</div>' : `<div class="head"><div class="title">${pwEscape(this._activeTag.name || "Dokumente")} · ${this._result?.count ?? "—"} Dokumente ${this._refreshing ? '<span class="loading">Wird aktualisiert …</span>' : ""}</div><div class="total">${pwEscape(this.aggregateText(this._result))}</div></div>${documents.length ? `<div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${this._refreshing ? "Dokumente werden geladen …" : "Keine Dokumente vorhanden."}</div>`}`}</main></ha-card>`;
+    this.shadowRoot.querySelectorAll("[data-sort]").forEach((button) => button.addEventListener("click", () => this.chooseSort(button.dataset.sort)));
+  }
+}
+
+class PaperlessWorkflowDetailsCardEditor extends PaperlessEditorBase {
+  setConfig(config) {
+    this.config = pwNormalizeConfig({ workflow_id: "paperless-main", ...config });
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.loadInstances(); this.render();
+  }
+  fieldOptions() { if (!this.instance) return []; return [...this.instance.document_fields.map((field) => ({ ...field, optionKey: `standard:${field.key}` })), ...this.instance.custom_fields.map((field) => ({ ...field, optionKey: `custom:${field.id}` }))]; }
+  defaultColumn(field) { const monetary = field.data_type === "monetary"; const title = field.optionKey === "standard:title"; return { key: field.optionKey, label: field.name, font_size: title ? 18 : monetary ? 16 : 14, text_style: title || monetary ? "bold" : "normal", align: monetary ? "right" : "left" }; }
+  move(from, to) { if (to < 0 || to >= this.config.columns.length || from === to) return; const columns = [...this.config.columns]; const [item] = columns.splice(from, 1); columns.splice(to, 0, item); this.update((config) => { config.columns = columns; }); }
+  render() {
+    if (!this.shadowRoot || !this.config) return;
+    const fields = this.fieldOptions(); const chosen = new Set(this.config.columns.map((column) => column.key)); const available = fields.filter((field) => !chosen.has(field.optionKey));
+    const columns = this.config.columns.map((column, index) => `<div class="row draggable column" draggable="true" data-index="${index}"><span class="handle">⋮⋮</span><div class="column-fields"><label>Spalte<input data-action="label" data-index="${index}" value="${pwEscape(column.label)}"></label><label>Größe (px)<input type="number" min="10" max="40" data-action="size" data-index="${index}" value="${Number(column.font_size || 14)}"></label><label>Schrift<select data-action="style" data-index="${index}"><option value="normal" ${column.text_style === "normal" ? "selected" : ""}>Normal</option><option value="bold" ${column.text_style === "bold" ? "selected" : ""}>Fett</option><option value="italic" ${column.text_style === "italic" ? "selected" : ""}>Kursiv</option></select></label><label>Ausrichtung<select data-action="align" data-index="${index}"><option value="left" ${column.align === "left" ? "selected" : ""}>Links</option><option value="center" ${column.align === "center" ? "selected" : ""}>Zentriert</option><option value="right" ${column.align === "right" ? "selected" : ""}>Rechts</option></select></label></div><span class="buttons"><button data-action="up" data-index="${index}">↑</button><button data-action="down" data-index="${index}">↓</button><button data-action="remove" data-index="${index}">×</button></span></div>`).join("");
+    const tagOptions = (this.instance?.tags || []).map((tag) => `<option value="${tag.id}" ${Number(this.config.default_tag_id) === Number(tag.id) ? "selected" : ""}>${pwEscape(tag.name)}</option>`).join("");
+    this.shadowRoot.innerHTML = `<style>${pwEditorStyle}</style><div class="editor"><div class="section"><h3>Workflow-Details</h3><div class="grid"><label>Paperless-Instanz<select data-action="instance"><option value="">Bitte auswählen</option>${this.instanceOptions()}</select></label><label>Workflow-ID<input data-action="workflow-id" value="${pwEscape(this.config.workflow_id)}"></label><label>Start-Tag / Vorschau<select data-action="default-tag"><option value="">Aus Workflow übernehmen</option>${tagOptions}</select></label><label>Maximale Dokumente<input type="number" min="1" max="100" data-action="max" value="${Number(this.config.max_documents || 50)}"></label></div><p class="hint">Die Workflow-ID muss mit der Workflow-Karte übereinstimmen. Im Dashboard folgt diese Karte automatisch dem dort ausgewählten Tag.</p></div><div class="section"><h3>Dokumentenspalten</h3><div class="add"><select data-add="column"><option value="">Feld auswählen …</option>${available.map((field) => `<option value="${pwEscape(field.optionKey)}">${pwEscape(field.name)}${field.optionKey.startsWith("custom:") ? " · Custom Field" : ""}</option>`).join("")}</select><button data-action="add">Hinzufügen</button></div>${columns || '<p class="hint">Noch keine Spalten ausgewählt.</p>'}<div class="grid" style="margin-top:12px"><label>API-Sortierung<select data-action="ordering"><option value="created" ${this.config.ordering === "created" ? "selected" : ""}>Erstellt · aufsteigend</option><option value="-created" ${this.config.ordering === "-created" ? "selected" : ""}>Erstellt · absteigend</option><option value="title" ${this.config.ordering === "title" ? "selected" : ""}>Titel · A–Z</option><option value="-modified" ${this.config.ordering === "-modified" ? "selected" : ""}>Zuletzt geändert</option></select></label></div></div></div>`;
+    const root = this.shadowRoot;
+    root.querySelector('[data-action="instance"]').addEventListener("change", (event) => this.update((config) => { config.instance_id = event.target.value; config.columns = PW_DEFAULTS.columns.map((column) => ({ ...column })); config.default_tag_id = null; }));
+    root.querySelector('[data-action="workflow-id"]').addEventListener("input", (event) => { this.config.workflow_id = event.target.value; this.changed(); });
+    root.querySelector('[data-action="default-tag"]').addEventListener("change", (event) => this.update((config) => { config.default_tag_id = event.target.value ? Number(event.target.value) : null; }));
+    root.querySelector('[data-action="max"]').addEventListener("input", (event) => { this.config.max_documents = Math.max(1, Math.min(100, Number(event.target.value) || 50)); this.changed(); });
+    root.querySelector('[data-action="ordering"]').addEventListener("change", (event) => this.update((config) => { config.ordering = event.target.value; }));
+    root.querySelectorAll('[data-action="label"],[data-action="size"]').forEach((input) => input.addEventListener("input", (event) => { const index = Number(event.target.dataset.index); if (event.target.dataset.action === "label") this.config.columns[index].label = event.target.value; else this.config.columns[index].font_size = Math.max(10, Math.min(40, Number(event.target.value) || 14)); this.changed(); }));
+    root.querySelectorAll('[data-action="style"],[data-action="align"]').forEach((select) => select.addEventListener("change", (event) => this.update((config) => { config.columns[Number(event.target.dataset.index)][event.target.dataset.action === "style" ? "text_style" : "align"] = event.target.value; })));
+    root.querySelectorAll("button[data-action]").forEach((button) => button.addEventListener("click", () => { const action = button.dataset.action; const index = Number(button.dataset.index); if (action === "add") { const key = root.querySelector('[data-add="column"]').value; const field = fields.find((item) => item.optionKey === key); if (field) this.update((config) => { config.columns.push(this.defaultColumn(field)); }); } else if (action === "remove") this.update((config) => { config.columns.splice(index, 1); }); else if (action === "up") this.move(index, index - 1); else if (action === "down") this.move(index, index + 1); }));
+    let dragged = null; root.querySelectorAll(".draggable").forEach((row) => { row.addEventListener("dragstart", () => { dragged = Number(row.dataset.index); row.classList.add("dragging"); }); row.addEventListener("dragend", () => row.classList.remove("dragging")); row.addEventListener("dragover", (event) => event.preventDefault()); row.addEventListener("drop", (event) => { event.preventDefault(); this.move(dragged, Number(row.dataset.index)); dragged = null; }); });
+  }
+}
+
 if (!customElements.get("paperless-workspace-card")) customElements.define("paperless-workspace-card", PaperlessWorkspaceCard);
 if (!customElements.get("paperless-workspace-card-editor")) customElements.define("paperless-workspace-card-editor", PaperlessWorkspaceCardEditor);
+if (!customElements.get("paperless-header-card")) customElements.define("paperless-header-card", PaperlessHeaderCard);
+if (!customElements.get("paperless-header-card-editor")) customElements.define("paperless-header-card-editor", PaperlessHeaderCardEditor);
+if (!customElements.get("paperless-workflow-card")) customElements.define("paperless-workflow-card", PaperlessWorkflowCard);
+if (!customElements.get("paperless-workflow-card-editor")) customElements.define("paperless-workflow-card-editor", PaperlessWorkflowCardEditor);
+if (!customElements.get("paperless-workflow-details-card")) customElements.define("paperless-workflow-details-card", PaperlessWorkflowDetailsCard);
+if (!customElements.get("paperless-workflow-details-card-editor")) customElements.define("paperless-workflow-details-card-editor", PaperlessWorkflowDetailsCardEditor);
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "paperless-workspace-card",
-  name: "Paperless Arbeitsbereich",
-  description: "Vollständig visuell konfigurierbare Tag-Liste und Dokumentdetails für Paperless-ngx.",
-  preview: true,
-});
+window.customCards.push(
+  { type: "paperless-header-card", name: "Paperless · Header", description: "Titel, Beschreibung und automatisch ermittelter DNS-Name.", preview: true },
+  { type: "paperless-workflow-card", name: "Paperless · Workflows", description: "Konfigurierbare Tag-Liste mit Zähler und optionaler Summe.", preview: true },
+  { type: "paperless-workflow-details-card", name: "Paperless · Workflow-Details", description: "Dynamische Dokumententabelle zum ausgewählten Workflow.", preview: true },
+);

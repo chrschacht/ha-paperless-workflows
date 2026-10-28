@@ -50,30 +50,35 @@ Every summary sensor also exposes the current Paperless tag colors in
 refreshed with the normal polling cycle, so dashboards can follow color
 changes made in Paperless without hard-coded color values.
 
-## Visual workspace card
+## Visual Paperless cards
 
-Version 0.4 adds `custom:paperless-workspace-card`, a reusable card with a
-native visual Lovelace editor. The card keeps all credentials on the Home
-Assistant server and lets the dashboard author configure:
+Version 0.5 splits the Paperless page into three independently placeable cards
+with native visual Lovelace editors:
 
-- The Paperless instance, header title, and description; the DNS name is
-  derived from the configured URL.
-- Any number of Paperless tags, reordered by drag and drop, with one optional
-  monetary custom field to total for each tag.
-- Document columns from standard Paperless properties and custom fields.
-  Columns can be reordered by drag and drop and have independent font size,
-  normal/bold/italic style, and left/center/right alignment.
-- The initial tag, document limit, and API ordering. Dashboard users can click
-  a tag to change the detail table and click a column header to sort locally.
+- `custom:paperless-header-card` configures the Paperless instance, title and
+  description. The DNS name and link are derived from the configured URL.
+- `custom:paperless-workflow-card` configures any number of Paperless tags,
+  reordered by drag and drop, with an optional monetary custom field to total
+  for each tag.
+- `custom:paperless-workflow-details-card` configures document columns from
+  standard Paperless properties and custom fields. Columns can be reordered by
+  drag and drop and have independent font size, normal/bold/italic style, and
+  left/center/right alignment.
+
+Workflow and detail cards are connected by a freely configurable Workflow ID.
+Selecting a tag in the workflow card updates every matching detail card on the
+same page. This keeps the three page areas separate while allowing multiple
+independent Paperless workspaces on one dashboard.
 
 The card frontend reads tags, custom fields, and documents through an
 authenticated Home Assistant WebSocket command. The Paperless API token is
 never returned to the browser and is never stored in Lovelace configuration.
 
 Add `/paperless_workflows/paperless-workspace-card.js` as a JavaScript module
-resource once, then choose **Paperless Arbeitsbereich** in the visual card
-picker. The same card can be used on multiple pages and each card can select a
-different configured Paperless instance.
+resource once, then choose **Paperless · Header**, **Paperless · Workflows** and
+**Paperless · Workflow-Details** in the visual card picker. The cards can be
+used on multiple pages and each set can select a different configured Paperless
+instance.
 
 ## Installation
 
