@@ -55,8 +55,11 @@ changes made in Paperless without hard-coded color values.
 Version 0.5 splits the Paperless page into three independently placeable cards
 with native visual Lovelace editors:
 
-- `custom:paperless-header-card` configures the Paperless instance, title and
-  description. The DNS name and link are derived from the configured URL.
+- `custom:paperless-header-card` configures the Paperless instance, title,
+  description and any number of status or information badges. The DNS name and
+  link are derived from the configured URL. Each badge has a selectable entity,
+  title, icon, size, row and order. Status badges also define their healthy
+  state and switch between green and red glass automatically.
 - `custom:paperless-workflow-card` configures any number of Paperless tags,
   reordered by drag and drop, with an optional monetary custom field to total
   for each tag.

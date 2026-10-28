@@ -48,6 +48,7 @@ class PaperlessCardBase extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     if (first) this.loadInstances();
+    else this.hassUpdated();
   }
 
   async loadInstances() {
@@ -67,6 +68,7 @@ class PaperlessCardBase extends HTMLElement {
   }
 
   instancesLoaded() { this.render(); }
+  hassUpdated() {}
 }
 
 class PaperlessEditorBase extends HTMLElement {
@@ -507,36 +509,87 @@ class PaperlessWorkspaceCardEditor extends HTMLElement {
 }
 
 class PaperlessHeaderCard extends PaperlessCardBase {
-  static getStubConfig() { return { title: "PAPERLESS-NGX", description: "Praxis-DMS" }; }
+  static getStubConfig() { return { title: "PAPERLESS-NGX", description: "Praxis-DMS", badges: [] }; }
   static async getConfigElement() { return document.createElement("paperless-header-card-editor"); }
 
   setConfig(config) {
-    this.config = { title: "PAPERLESS-NGX", description: "Praxis-DMS", ...config };
+    this.config = { title: "PAPERLESS-NGX", description: "Praxis-DMS", badges: [], ...config, badges: Array.isArray(config.badges) ? config.badges.map((badge) => ({ ...badge })) : [] };
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this.render(); this.loadInstances();
   }
 
   getCardSize() { return 2; }
   getLayoutOptions() { return { grid_columns: "full", grid_rows: 2 }; }
+  hassUpdated() { this.render(); }
+
+  badgeState(badge) {
+    const stateObject = this._hass?.states?.[badge.entity];
+    if (!stateObject) return { state: "Nicht verfügbar", ok: false, missing: true };
+    const raw = String(stateObject.state ?? "");
+    const state = this._hass?.formatEntityState?.(stateObject) || raw;
+    const okValues = String(badge.ok_state ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+    return { state, ok: !badge.status || okValues.includes(raw.toLowerCase()), missing: false };
+  }
+
+  showMoreInfo(entityId) {
+    if (!entityId) return;
+    this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
+  }
 
   render() {
     if (!this.shadowRoot || !this.config) return;
-    this.shadowRoot.innerHTML = `<style>${pwGlassStyle}.header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:24px 26px 20px}.title{margin:0 0 3px;font-size:28px;line-height:1.1}.description{font-size:15px;opacity:.82}.dns{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.42);border-radius:999px;padding:9px 13px;background:rgba(255,255,255,.07);white-space:nowrap}.dns:hover{background:rgba(255,255,255,.14)}.error{padding:0 26px 18px;color:#ffb4ab}@media(max-width:700px){.header{align-items:flex-start;flex-direction:column}}</style><ha-card><div class="header"><div><div class="title">${pwEscape(this.config.title)}</div><div class="description">${pwEscape(this.config.description)}</div></div>${this._instance ? `<a class="dns" href="${pwEscape(this._instance.url)}" target="_blank" rel="noopener noreferrer">${pwEscape(this._instance.dns_name)}</a>` : ""}</div>${this._error ? `<div class="error">${pwEscape(this._error)}</div>` : ""}</ha-card>`;
+    const badgeRows = [1, 2].map((row) => {
+      const badges = this.config.badges.filter((badge) => Number(badge.row || 1) === row).map((badge, index) => {
+        const state = this.badgeState(badge);
+        const kind = badge.status ? (state.ok ? "ok" : "error") : "neutral";
+        const size = ["small", "medium", "large"].includes(badge.size) ? badge.size : (badge.status ? "medium" : "small");
+        return `<button class="badge ${kind} ${size}" data-entity="${pwEscape(badge.entity)}"><ha-icon icon="${pwEscape(badge.icon || "mdi:information-outline")}"></ha-icon><span class="badge-text"><span class="badge-name">${pwEscape(badge.name || badge.entity || `Badge ${index + 1}`)}</span><span class="badge-state">${pwEscape(state.state)}</span></span></button>`;
+      }).join("");
+      return badges ? `<div class="badge-row row-${row}">${badges}</div>` : "";
+    }).join("");
+    this.shadowRoot.innerHTML = `<style>${pwGlassStyle}.header{display:grid;grid-template-columns:minmax(230px,1fr) auto;align-items:center;gap:24px;padding:20px 24px}.identity{align-self:center}.title{margin:0 0 3px;font-size:28px;line-height:1.1}.description{font-size:15px;opacity:.82}.dns{display:inline-block;margin-top:8px;color:#fff;text-decoration:none;font-size:12px;opacity:.82}.dns:hover{opacity:1;text-decoration:underline}.badges{display:grid;justify-items:end;gap:8px;min-width:0}.badge-row{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.badge{appearance:none;box-sizing:border-box;display:flex;align-items:center;justify-content:flex-start;gap:9px;height:58px;padding:0 13px;border:1px solid rgba(255,255,255,.34);border-radius:29px;background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.045) 60%,rgba(255,255,255,.025));box-shadow:inset 0 1px 0 rgba(255,255,255,.40),inset 0 -1px 0 rgba(255,255,255,.08),0 8px 22px rgba(0,0,0,.14);backdrop-filter:blur(24px) saturate(128%);-webkit-backdrop-filter:blur(24px) saturate(128%);color:#fff;text-align:left;cursor:pointer;text-shadow:0 1px 2px rgba(0,0,0,.42)}.badge.small{width:142px}.badge.medium{width:172px}.badge.large{width:210px}.badge.ok{--badge-tint:rgba(48,209,88,.075);--badge-edge:rgba(132,255,167,.44);border-color:var(--badge-edge);background:linear-gradient(180deg,rgba(255,255,255,.14),var(--badge-tint) 58%,rgba(255,255,255,.035))}.badge.error{--badge-tint:rgba(255,69,58,.10);--badge-edge:rgba(255,140,135,.50);border-color:var(--badge-edge);background:linear-gradient(180deg,rgba(255,255,255,.14),var(--badge-tint) 58%,rgba(255,255,255,.035))}.badge:hover{transform:translateY(-1px);background-color:rgba(255,255,255,.06)}.badge ha-icon{flex:0 0 auto;color:#fff;--mdc-icon-size:19px}.badge-text{display:flex;flex:1 1 auto;min-width:0;flex-direction:column;align-items:flex-start;line-height:1.15}.badge-name,.badge-state{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge-name{font-size:11px;font-weight:650}.badge-state{margin-top:3px;font-size:12px;color:rgba(255,255,255,.84)}.error-message{padding:0 26px 18px;color:#ffb4ab}@media(max-width:1050px){.header{grid-template-columns:1fr}.badges{justify-items:start}.badge-row{justify-content:flex-start}}@media(max-width:600px){.badge.small,.badge.medium,.badge.large{width:calc(50% - 4px);min-width:138px}.badge-row{width:100%}}</style><ha-card><div class="header"><div class="identity"><div class="title">${pwEscape(this.config.title)}</div><div class="description">${pwEscape(this.config.description)}</div>${this._instance ? `<a class="dns" href="${pwEscape(this._instance.url)}" target="_blank" rel="noopener noreferrer">${pwEscape(this._instance.dns_name)}</a>` : ""}</div>${badgeRows ? `<div class="badges">${badgeRows}</div>` : ""}</div>${this._error ? `<div class="error-message">${pwEscape(this._error)}</div>` : ""}</ha-card>`;
+    this.shadowRoot.querySelectorAll("[data-entity]").forEach((badge) => badge.addEventListener("click", () => this.showMoreInfo(badge.dataset.entity)));
   }
 }
 
 class PaperlessHeaderCardEditor extends PaperlessEditorBase {
   setConfig(config) {
-    this.config = { title: "PAPERLESS-NGX", description: "Praxis-DMS", ...config };
+    this.config = { title: "PAPERLESS-NGX", description: "Praxis-DMS", badges: [], ...config, badges: Array.isArray(config.badges) ? config.badges.map((badge) => ({ ...badge })) : [] };
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this.loadInstances(); this.render();
   }
 
   render() {
     if (!this.shadowRoot || !this.config) return;
-    this.shadowRoot.innerHTML = `<style>${pwEditorStyle}</style><div class="editor"><div class="section"><h3>Paperless-Header</h3><label>Instanz<select data-action="instance"><option value="">Bitte auswählen</option>${this.instanceOptions()}</select></label><div class="grid" style="margin-top:12px"><label>Titel<input data-action="title" value="${pwEscape(this.config.title)}"></label><label>Beschreibung<input data-action="description" value="${pwEscape(this.config.description)}"></label></div><p class="hint">Der DNS-Name und das Linkziel werden automatisch aus der ausgewählten Paperless-Instanz ermittelt.</p>${this.error ? `<p class="error">${pwEscape(this.error)}</p>` : ""}</div></div>`;
+    const entityOptions = Object.keys(this._hass?.states || {}).sort().map((entity) => `<option value="${pwEscape(entity)}"></option>`).join("");
+    const badgeRows = this.config.badges.map((badge, index) => `<div class="row draggable column" draggable="true" data-index="${index}"><span class="handle">⋮⋮</span><div class="badge-fields"><label>Entity<input list="paperless-entities" data-action="badge-entity" data-index="${index}" value="${pwEscape(badge.entity || "")}"></label><label>Titel<input data-action="badge-name" data-index="${index}" value="${pwEscape(badge.name || "")}"></label><label>Icon<input data-action="badge-icon" data-index="${index}" value="${pwEscape(badge.icon || "mdi:information-outline")}"></label><label>Art<select data-action="badge-status" data-index="${index}"><option value="status" ${badge.status ? "selected" : ""}>Status</option><option value="info" ${!badge.status ? "selected" : ""}>Information</option></select></label><label>OK-Zustand<input data-action="badge-ok" data-index="${index}" value="${pwEscape(badge.ok_state ?? "on")}" ${badge.status ? "" : "disabled"}></label><label>Größe<select data-action="badge-size" data-index="${index}"><option value="small" ${badge.size === "small" ? "selected" : ""}>Klein</option><option value="medium" ${badge.size === "medium" ? "selected" : ""}>Mittel</option><option value="large" ${badge.size === "large" ? "selected" : ""}>Groß</option></select></label><label>Zeile<select data-action="badge-row" data-index="${index}"><option value="1" ${Number(badge.row || 1) === 1 ? "selected" : ""}>1 · Status</option><option value="2" ${Number(badge.row || 1) === 2 ? "selected" : ""}>2 · Inhalt</option></select></label></div><span class="buttons"><button data-action="up" data-index="${index}">↑</button><button data-action="down" data-index="${index}">↓</button><button data-action="remove" data-index="${index}">×</button></span></div>`).join("");
+    this.shadowRoot.innerHTML = `<style>${pwEditorStyle}.badge-fields{display:grid;grid-template-columns:minmax(210px,1.5fr) minmax(130px,1fr) minmax(150px,1fr) 105px 110px 90px 105px;gap:8px;flex:1}@media(max-width:900px){.badge-fields{grid-template-columns:1fr 1fr}}@media(max-width:600px){.badge-fields{grid-template-columns:1fr}}</style><datalist id="paperless-entities">${entityOptions}</datalist><div class="editor"><div class="section"><h3>Paperless-Header</h3><label>Instanz<select data-action="instance"><option value="">Bitte auswählen</option>${this.instanceOptions()}</select></label><div class="grid" style="margin-top:12px"><label>Titel<input data-action="title" value="${pwEscape(this.config.title)}"></label><label>Beschreibung<input data-action="description" value="${pwEscape(this.config.description)}"></label></div><p class="hint">Der DNS-Name und das Linkziel werden automatisch aus der ausgewählten Paperless-Instanz ermittelt.</p>${this.error ? `<p class="error">${pwEscape(this.error)}</p>` : ""}</div><div class="section"><h3>Status- und Informations-Badges</h3><button class="add-badge" data-action="add-badge">Badge hinzufügen</button>${badgeRows || '<p class="hint">Noch keine Badges ausgewählt.</p>'}<p class="hint">Status-Badges wechseln bei ihrem OK-Zustand zu grün, sonst zu rot. Mehrere gültige Zustände können kommagetrennt angegeben werden. Zeile 2 erzeugt den manuellen Umbruch vor den Inhaltsanzeigen.</p></div></div>`;
     this.shadowRoot.querySelector('[data-action="instance"]').addEventListener("change", (event) => this.update((config) => { config.instance_id = event.target.value; }));
-    this.shadowRoot.querySelectorAll("input[data-action]").forEach((input) => input.addEventListener("input", (event) => { this.config[event.target.dataset.action] = event.target.value; this.changed(); }));
+    this.shadowRoot.querySelectorAll("input[data-action]").forEach((input) => input.addEventListener("input", (event) => {
+      const action = event.target.dataset.action; const index = Number(event.target.dataset.index);
+      if (action === "title" || action === "description") this.config[action] = event.target.value;
+      else if (action === "badge-entity") this.config.badges[index].entity = event.target.value;
+      else if (action === "badge-name") this.config.badges[index].name = event.target.value;
+      else if (action === "badge-icon") this.config.badges[index].icon = event.target.value;
+      else if (action === "badge-ok") this.config.badges[index].ok_state = event.target.value;
+      this.changed();
+    }));
+    this.shadowRoot.querySelectorAll("select[data-action^='badge-']").forEach((select) => select.addEventListener("change", (event) => {
+      const action = event.target.dataset.action; const index = Number(event.target.dataset.index);
+      this.update((config) => {
+        if (action === "badge-status") config.badges[index].status = event.target.value === "status";
+        else if (action === "badge-size") config.badges[index].size = event.target.value;
+        else if (action === "badge-row") config.badges[index].row = Number(event.target.value);
+      });
+    }));
+    this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => button.addEventListener("click", () => {
+      const action = button.dataset.action; const index = Number(button.dataset.index);
+      if (action === "add-badge") this.update((config) => { config.badges.push({ entity: "", name: "Neues Badge", icon: "mdi:information-outline", status: false, ok_state: "on", size: "small", row: 2 }); });
+      else if (action === "remove") this.update((config) => { config.badges.splice(index, 1); });
+      else if (action === "up" || action === "down") { const target = action === "up" ? index - 1 : index + 1; if (target >= 0 && target < this.config.badges.length) { const badges = [...this.config.badges]; const [item] = badges.splice(index, 1); badges.splice(target, 0, item); this.update((config) => { config.badges = badges; }); } }
+    }));
+    let dragged = null;
+    this.shadowRoot.querySelectorAll(".draggable").forEach((row) => { row.addEventListener("dragstart", () => { dragged = Number(row.dataset.index); row.classList.add("dragging"); }); row.addEventListener("dragend", () => row.classList.remove("dragging")); row.addEventListener("dragover", (event) => event.preventDefault()); row.addEventListener("drop", (event) => { event.preventDefault(); const target = Number(row.dataset.index); if (dragged !== null && dragged !== target) { const badges = [...this.config.badges]; const [item] = badges.splice(dragged, 1); badges.splice(target, 0, item); this.update((config) => { config.badges = badges; }); } dragged = null; }); });
   }
 }
 
