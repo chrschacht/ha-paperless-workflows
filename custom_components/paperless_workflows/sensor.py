@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import MAX_ATTRIBUTE_BYTES
 from .entity import PaperlessWorkflowEntity
 from .normalization import normalize_lookup_name
-from .views import bounded_documents, render_document
+from .views import bounded_documents, render_document, view_tag_colors
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -55,6 +55,7 @@ class ViewSummarySensor(PaperlessWorkflowEntity, SensorEntity):
             "view_id": self._view["id"], "paperless_url": self.coordinator.client.base_url,
             "missing_configuration": data["missing"],
         }
+        attributes.update(view_tag_colors(self._view, self.coordinator.data["metadata"]))
         if self._view.get("group_by", "none") != "none":
             attributes["group_by"] = self._view["group_by"]
             attributes["secondary_group_by"] = self._view.get("secondary_group_by", "none")

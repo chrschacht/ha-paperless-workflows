@@ -26,10 +26,14 @@ build_query = views.build_query
 group_documents = views.group_documents
 metadata_maps = views.metadata_maps
 render_document = views.render_document
+view_tag_colors = views.view_tag_colors
 
 
 METADATA = {
-    "tags": [{"id": 7, "name": "Bezahlen"}, {"id": 26, "name": "KI-prüfen"}],
+    "tags": [
+        {"id": 7, "name": "Bezahlen", "color": "#D6675B"},
+        {"id": 26, "name": "KI-prüfen", "color": "#d279a1"},
+    ],
     "correspondents": [{"id": 3, "name": "Labor"}],
     "document_types": [{"id": 4, "name": "Rechnung"}],
     "storage_paths": [{"id": 5, "name": "Praxis"}],
@@ -71,6 +75,28 @@ class ViewTests(unittest.TestCase):
         shown, truncated = bounded_documents([{"title": "x" * 100}, {"title": "y" * 100}], 50, 150)
         self.assertEqual(len(shown), 1)
         self.assertTrue(truncated)
+
+    def test_exposes_live_tag_colors_with_required_tag_as_accent(self):
+        result = view_tag_colors(
+            {"filters": {"tags_all": ["Bezahlen"], "tags_any": ["KI-prüfen"]}},
+            METADATA,
+        )
+        self.assertEqual(result["accent_tag"], "Bezahlen")
+        self.assertEqual(result["accent_color"], "#d6675b")
+        self.assertEqual(
+            result["tag_colors"],
+            {"Bezahlen": "#d6675b", "KI-prüfen": "#d279a1"},
+        )
+
+    def test_ignores_invalid_tag_colors(self):
+        metadata = {
+            **METADATA,
+            "tags": [{"id": 7, "name": "Bezahlen", "color": "red;display:none"}],
+        }
+        self.assertEqual(
+            view_tag_colors({"filters": {"tags_all": ["Bezahlen"]}}, metadata),
+            {"accent_tag": None, "accent_color": None, "tag_colors": {}},
+        )
 
 
 if __name__ == "__main__":

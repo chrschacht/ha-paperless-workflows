@@ -44,6 +44,12 @@ The initial setup contains useful views for `Bezahlen`, `KI-prüfen`, and
 `ocrpruefen`. The payment view sums the `Betrag` monetary field. All defaults
 can be edited or deleted in the UI.
 
+Every summary sensor also exposes the current Paperless tag colors in
+`tag_colors`. `accent_color` and `accent_tag` identify the first required
+(`tags_all`) or optional (`tags_any`) workflow tag. These attributes are
+refreshed with the normal polling cycle, so dashboards can follow color
+changes made in Paperless without hard-coded color values.
+
 ## Installation
 
 Copy `custom_components/paperless_workflows` to Home Assistant's

@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import json
+import re
 from typing import Any
 
 from .amounts import parse_monetary
@@ -26,6 +27,8 @@ ADVANCED_FILTER_PREFIXES = (
     "shared_by__", "storage_path__", "tags__", "title__",
 )
 
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
 
 def metadata_maps(metadata: Mapping[str, list[dict[str, Any]]]) -> dict[str, dict[Any, str]]:
     """Build id/name maps for document rendering and grouping."""
@@ -33,6 +36,47 @@ def metadata_maps(metadata: Mapping[str, list[dict[str, Any]]]) -> dict[str, dic
     for key in ("tags", "correspondents", "document_types", "storage_paths", "users", "custom_fields"):
         result[key] = {item.get("id"): str(item.get("name") or item.get("username") or item.get("id")) for item in metadata.get(key, [])}
     return result
+
+
+def view_tag_colors(
+    view: Mapping[str, Any], metadata: Mapping[str, list[dict[str, Any]]]
+) -> dict[str, Any]:
+    """Return the live Paperless colors for tags used by a view.
+
+    The first positive tag filter becomes the accent. ``tags_all`` takes
+    precedence over ``tags_any`` so a view with one required workflow tag and
+    additional optional tags keeps the required tag's visual identity.
+    """
+    filters = view.get("filters") or {}
+    configured_names = [
+        str(name)
+        for key in ("tags_all", "tags_any")
+        for name in filters.get(key, [])
+        if str(name)
+    ]
+    tags_by_name = {
+        normalize_lookup_name(str(tag.get("name", ""))): tag
+        for tag in metadata.get("tags", [])
+    }
+    colors: dict[str, str] = {}
+    accent_tag: str | None = None
+    for configured_name in configured_names:
+        tag = tags_by_name.get(normalize_lookup_name(configured_name))
+        if tag is None:
+            continue
+        color = str(tag.get("color") or "").strip()
+        if not _HEX_COLOR.fullmatch(color):
+            continue
+        tag_name = str(tag.get("name") or configured_name)
+        if tag_name not in colors:
+            colors[tag_name] = color.lower()
+        if accent_tag is None:
+            accent_tag = tag_name
+    return {
+        "accent_tag": accent_tag,
+        "accent_color": colors.get(accent_tag) if accent_tag else None,
+        "tag_colors": colors,
+    }
 
 
 def _resolve_names(names: Iterable[str], items: list[dict[str, Any]]) -> list[int]:
