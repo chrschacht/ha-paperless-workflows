@@ -658,7 +658,12 @@ class PaperlessWorkflowDetailsCard extends PaperlessCardBase {
     this._selectionHandler = (event) => {
       if (event.detail?.workflow_id !== this.config?.workflow_id) return;
       if (this.config.instance_id && event.detail.entry_id !== this.config.instance_id) return;
-      this._activeTag = event.detail.tag; this._sortKey = this.config.default_sort || null; this._sortDirection = this.config.default_direction || "asc"; this.refresh();
+      this._activeTag = event.detail.tag;
+      this._result = null;
+      this._sortKey = this.config.default_sort || null;
+      this._sortDirection = this.config.default_direction || "asc";
+      if (this._refreshing) { this._refreshPending = true; this.render(); }
+      else this.refresh();
     };
     window.addEventListener(PW_WORKFLOW_EVENT, this._selectionHandler);
   }
@@ -695,7 +700,13 @@ class PaperlessWorkflowDetailsCard extends PaperlessCardBase {
       if (this._activeTag.sum_field_id !== undefined && this._activeTag.sum_field_id !== null && this._activeTag.sum_field_id !== "") message.sum_field_id = Number(this._activeTag.sum_field_id);
       this._result = await this._hass.callWS(message); this._error = null;
     } catch (error) { this._error = error?.message || String(error); }
-    finally { this._refreshing = false; this.render(); }
+    finally {
+      this._refreshing = false;
+      const refreshPending = this._refreshPending;
+      this._refreshPending = false;
+      this.render();
+      if (refreshPending) this.refresh();
+    }
   }
 
   render() {
