@@ -11,6 +11,7 @@ from aiohttp import ClientResponseError, ClientSession
 
 from .normalization import normalize_lookup_name
 from .views import aggregate_field, build_query, group_documents, metadata_maps
+from .views import render_document
 
 
 class PaperlessApiError(Exception):
@@ -141,3 +142,75 @@ class PaperlessWorkflowClient:
             }
             all_missing.extend(f"{view['name']}: {item}" for item in missing)
         return {"views": result, "metadata": metadata, "maps": maps, "missing": all_missing}
+
+    async def fetch_tag_workspace(
+        self,
+        *,
+        tag_id: int,
+        metadata: dict[str, list[dict[str, Any]]],
+        columns: list[str],
+        sum_field_id: int | None,
+        default_currency: str,
+        ordering: str = "created",
+        max_documents: int = 50,
+    ) -> dict[str, Any]:
+        """Return one tag summary and optional documents for the dashboard card.
+
+        The frontend only sends stable Paperless ids.  The API token stays in
+        the config entry and never becomes part of Lovelace configuration.
+        """
+        documents = await self._get_all(
+            "api/documents/",
+            {"tags__id__all": str(tag_id), "ordering": ordering},
+        )
+        maps = metadata_maps(metadata)
+        custom_by_id = {
+            int(field["id"]): field
+            for field in metadata.get("custom_fields", [])
+            if field.get("id") is not None
+        }
+        standard_fields: list[str] = []
+        custom_field_names: list[str] = []
+        for column in columns:
+            if column.startswith("standard:"):
+                standard_fields.append(column.split(":", 1)[1])
+            elif column.startswith("custom:"):
+                try:
+                    field = custom_by_id.get(int(column.split(":", 1)[1]))
+                except ValueError:
+                    field = None
+                if field is not None:
+                    custom_field_names.append(str(field.get("name") or field["id"]))
+        if custom_field_names:
+            standard_fields.append("custom_fields")
+
+        rendered = [
+            render_document(
+                document,
+                standard_fields,
+                maps,
+                self.base_url,
+                custom_field_names,
+            )
+            for document in documents[:max_documents]
+        ] if max_documents else []
+
+        aggregate = None
+        if sum_field_id is not None and (field := custom_by_id.get(sum_field_id)) is not None:
+            totals, invalid = aggregate_field(documents, field, default_currency)
+            aggregate = {
+                "field_id": sum_field_id,
+                "name": str(field.get("name") or sum_field_id),
+                "type": field.get("data_type"),
+                "totals": {currency or default_currency: float(value) for currency, value in totals.items()},
+                "invalid_values": invalid,
+            }
+
+        return {
+            "tag_id": tag_id,
+            "count": len(documents),
+            "documents": rendered,
+            "documents_shown": len(rendered),
+            "documents_truncated": len(documents) > len(rendered),
+            "aggregate": aggregate,
+        }

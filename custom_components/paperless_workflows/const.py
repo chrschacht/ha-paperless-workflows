@@ -21,6 +21,7 @@ MAX_ATTRIBUTE_BYTES = 14_000
 
 PLATFORMS = ["sensor", "binary_sensor"]
 DEFAULT_UPDATE_INTERVAL = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
+FRONTEND_URL = "/paperless_workflows/paperless-workspace-card.js"
 
 DOCUMENT_FIELDS = {
     "title": "Titel", "correspondent": "Korrespondent", "document_type": "Dokumenttyp",
@@ -28,6 +29,14 @@ DOCUMENT_FIELDS = {
     "created": "Erstellt", "added": "Hinzugefügt", "modified": "Geändert",
     "archive_serial_number": "Archivnummer", "original_file_name": "Originaldatei",
     "mime_type": "MIME-Typ", "page_count": "Seiten", "owner": "Eigentümer",
+}
+
+DOCUMENT_FIELD_TYPES = {
+    "title": "text", "correspondent": "text", "document_type": "text",
+    "storage_path": "text", "tags": "tags", "created": "date", "added": "date",
+    "modified": "date", "archive_serial_number": "number",
+    "original_file_name": "text", "mime_type": "text", "page_count": "number",
+    "owner": "text",
 }
 
 GROUP_DIMENSIONS = {

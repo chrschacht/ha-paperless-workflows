@@ -50,6 +50,31 @@ Every summary sensor also exposes the current Paperless tag colors in
 refreshed with the normal polling cycle, so dashboards can follow color
 changes made in Paperless without hard-coded color values.
 
+## Visual workspace card
+
+Version 0.4 adds `custom:paperless-workspace-card`, a reusable card with a
+native visual Lovelace editor. The card keeps all credentials on the Home
+Assistant server and lets the dashboard author configure:
+
+- The Paperless instance, header title, and description; the DNS name is
+  derived from the configured URL.
+- Any number of Paperless tags, reordered by drag and drop, with one optional
+  monetary custom field to total for each tag.
+- Document columns from standard Paperless properties and custom fields.
+  Columns can be reordered by drag and drop and have independent font size,
+  normal/bold/italic style, and left/center/right alignment.
+- The initial tag, document limit, and API ordering. Dashboard users can click
+  a tag to change the detail table and click a column header to sort locally.
+
+The card frontend reads tags, custom fields, and documents through an
+authenticated Home Assistant WebSocket command. The Paperless API token is
+never returned to the browser and is never stored in Lovelace configuration.
+
+Add `/paperless_workflows/paperless-workspace-card.js` as a JavaScript module
+resource once, then choose **Paperless Arbeitsbereich** in the visual card
+picker. The same card can be used on multiple pages and each card can select a
+different configured Paperless instance.
+
 ## Installation
 
 Copy `custom_components/paperless_workflows` to Home Assistant's

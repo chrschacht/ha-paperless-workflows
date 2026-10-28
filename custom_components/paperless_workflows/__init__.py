@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import PLATFORMS
+from .const import DOMAIN, FRONTEND_URL, PLATFORMS
 from .coordinator import PaperlessWorkflowCoordinator
+from .websocket import async_register_websocket_commands
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -55,6 +58,17 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Paperless Workflows from a config entry."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if not domain_data.get("frontend_registered"):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(
+                FRONTEND_URL,
+                str(Path(__file__).parent / "frontend" / "paperless-workspace-card.js"),
+                False,
+            )
+        ])
+        async_register_websocket_commands(hass)
+        domain_data["frontend_registered"] = True
     coordinator = PaperlessWorkflowCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator

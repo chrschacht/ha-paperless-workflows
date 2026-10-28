@@ -66,7 +66,8 @@ class PaperlessWorkflowsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(user_input[CONF_URL].casefold())
                 self._abort_if_unique_id_configured()
                 user_input[CONF_VIEWS] = default_views()
-                return self.async_create_entry(title="Paperless Workflows", data=user_input)
+                hostname = urlparse(user_input[CONF_URL]).hostname or user_input[CONF_URL]
+                return self.async_create_entry(title=f"Paperless · {hostname}", data=user_input)
         return self.async_show_form(step_id="user", data_schema=_connection_schema(user_input or {}), errors=errors)
 
     async def async_step_reconfigure(self, user_input=None):
