@@ -195,6 +195,11 @@ class PaperlessWorkspaceCard extends HTMLElement {
       .join(" · ");
   }
 
+  liveTag(configured) {
+    return this._instance?.tags.find((tag) => Number(tag.id) === Number(configured?.id))
+      || configured || null;
+  }
+
   compareDocuments(left, right) {
     if (!this._sortKey) return 0;
     const definition = this.fieldDefinition(this._sortKey);
@@ -231,14 +236,16 @@ class PaperlessWorkspaceCard extends HTMLElement {
     const activeTag = this.config.tags.find((tag) => Number(tag.id) === Number(this._activeTagId));
     const result = activeTag ? this._results.get(Number(activeTag.id)) : null;
     const documents = [...(result?.documents || [])].sort((a, b) => this.compareDocuments(a, b));
-    const accent = pwColor(activeTag?.color);
+    const liveActiveTag = this.liveTag(activeTag);
+    const accent = pwColor(liveActiveTag?.color);
     const total = this.aggregateText(result);
     const tagButtons = this.config.tags.map((tag) => {
+      const liveTag = this.liveTag(tag);
       const summary = this._results.get(Number(tag.id));
       const selected = Number(tag.id) === Number(this._activeTagId);
-      const color = pwColor(tag.color);
+      const color = pwColor(liveTag?.color);
       return `<button class="tag ${selected ? "selected" : ""}" data-tag="${Number(tag.id)}" style="--tag-color:${color}">
-        <span class="tag-name">${pwEscape(tag.name)}</span>
+        <span class="tag-name">${pwEscape(liveTag?.name || tag.name)}</span>
         <span class="tag-meta"><strong>${summary?.count ?? "—"}</strong> Dokumente</span>
         ${summary?.aggregate ? `<span class="tag-sum">${pwEscape(this.aggregateText(summary))}</span>` : ""}
       </button>`;
@@ -268,7 +275,7 @@ class PaperlessWorkspaceCard extends HTMLElement {
       @media(max-width:800px){.header{align-items:flex-start;flex-direction:column}.workspace{grid-template-columns:1fr}.sidebar{border-right:0;border-bottom:1px solid rgba(255,255,255,.25)}.details{padding:16px 14px 22px}.table-wrap table{min-width:720px}}
     </style><ha-card>
       <div class="header"><div><div class="title">${pwEscape(this.config.title)}</div><div class="description">${pwEscape(this.config.description)}</div></div>${this._instance ? `<a class="dns" href="${pwEscape(this._instance.url)}" target="_blank" rel="noopener noreferrer">${pwEscape(this._instance.dns_name)}</a>` : ""}</div>
-      ${this._error ? `<div class="details error">${pwEscape(this._error)}</div>` : !this._instance ? `<div class="details setup">Bitte im Karteneditor eine Paperless-Instanz auswählen.</div>` : !this.config.tags.length ? `<div class="details setup">Bitte im Karteneditor mindestens einen Tag hinzufügen.</div>` : `<div class="workspace"><aside class="sidebar"><div class="sidebar-label">Dokumenten-Workflows</div>${tagButtons}</aside><main class="details"><div class="detail-head"><div class="detail-title">${pwEscape(activeTag?.name || "Dokumente")} · ${result?.count ?? "—"} Dokumente ${this._refreshing ? '<span class="loading">Wird aktualisiert …</span>' : ""}</div><div class="detail-total">${pwEscape(total)}</div></div>${documents.length ? `<div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${this._refreshing ? "Dokumente werden geladen …" : "Keine Dokumente vorhanden."}</div>`}</main></div>`}
+      ${this._error ? `<div class="details error">${pwEscape(this._error)}</div>` : !this._instance ? `<div class="details setup">Bitte im Karteneditor eine Paperless-Instanz auswählen.</div>` : !this.config.tags.length ? `<div class="details setup">Bitte im Karteneditor mindestens einen Tag hinzufügen.</div>` : `<div class="workspace"><aside class="sidebar"><div class="sidebar-label">Dokumenten-Workflows</div>${tagButtons}</aside><main class="details"><div class="detail-head"><div class="detail-title">${pwEscape(liveActiveTag?.name || activeTag?.name || "Dokumente")} · ${result?.count ?? "—"} Dokumente ${this._refreshing ? '<span class="loading">Wird aktualisiert …</span>' : ""}</div><div class="detail-total">${pwEscape(total)}</div></div>${documents.length ? `<div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${this._refreshing ? "Dokumente werden geladen …" : "Keine Dokumente vorhanden."}</div>`}</main></div>`}
     </ha-card>`;
     this.shadowRoot.querySelectorAll("[data-tag]").forEach((button) => button.addEventListener("click", () => this.chooseTag(button.dataset.tag)));
     this.shadowRoot.querySelectorAll("[data-sort]").forEach((button) => button.addEventListener("click", () => this.chooseSort(button.dataset.sort)));
